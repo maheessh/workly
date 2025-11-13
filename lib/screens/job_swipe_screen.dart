@@ -7,9 +7,9 @@ import 'package:job_tinder/themes/app_theme.dart';
 import 'dart:math';
 
 import '../models/job_model.dart';
-// import '../data/mock_data.dart'; // No longer needed
+import '../models/user_model.dart'; // <-- ADD THIS
 import '../providers/auth_provider.dart';
-import '../providers/job_provider.dart'; // <-- Import the new provider
+import '../providers/job_provider.dart';
 import 'profile_screen.dart';
 import 'job_detail_screen.dart';
 import '../widgets/job_card.dart';
@@ -23,7 +23,6 @@ class JobSwipeScreen extends StatefulWidget {
 
 class _JobSwipeScreenState extends State<JobSwipeScreen> {
   final List<JobModel> _savedJobs = [];
-  // late List<JobModel> _availableJobs; // This will now come from the provider
   int _cardIndex = 0;
 
   // --- Animation State (No changes here) ---
@@ -37,17 +36,15 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   @override
   void initState() {
     super.initState();
-    // _availableJobs = List.from(mockJobs); // Remove this
     _loadSavedJobs();
 
-    // NEW: Call the provider to fetch jobs when the screen loads
+    // Fetch the list of jobs from Google Sheets
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Use read() here as we are in initState
       context.read<JobProvider>().fetchJobs();
     });
   }
 
-  // Load saved jobs from storage (No changes here)
+  // --- Utility/State Methods (No changes to _loadSavedJobs or _saveJobs) ---
   Future<void> _loadSavedJobs() async {
     final savedJobs = await SavedJobsService.loadSwipedJobs();
     setState(() {
@@ -55,25 +52,13 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     });
   }
 
-  // Save jobs to storage (No changes here)
   Future<void> _saveJobs() async {
     await SavedJobsService.saveSwipedJobs(_savedJobs);
   }
+  // ---
 
-  // Calculate match score (No changes here)
-  int calculateMatchScore(JobModel job) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.currentUser;
-    if (user == null) return 0;
-
-    int score = 0;
-    int commonSkills = user.skills.intersection(job.requiredSkills).length;
-    if (job.requiredSkills.isNotEmpty) {
-      score += (60 * (commonSkills / job.requiredSkills.length)).round();
-    }
-    if (user.experience == job.experienceLevel) score += 40;
-    return min(100, score);
-  }
+  // 🔴 REMOVED: The old `calculateMatchScore` function is gone.
+  // int calculateMatchScore(JobModel job) { ... }
 
   // --- Pan/Drag Handlers (No changes here) ---
   void _onPanUpdate(DragUpdateDetails details) {
@@ -108,6 +93,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   }
   // ---
 
+  // --- Animation Methods (No changes here) ---
   void _advanceCard() {
     setState(() {
       _cardOffset = Offset.zero;
@@ -117,9 +103,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     });
   }
 
-  // UPDATED: Needs to get the job list from the provider
   void _animateAndSave() {
-    // Get the provider
     final jobProvider = context.read<JobProvider>();
     if (_isSwiping || _cardIndex >= jobProvider.jobs.length) return;
 
@@ -131,7 +115,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     });
 
     Future.delayed(_animationDuration, () {
-      // Use provider.jobs here
       _savedJobs.add(jobProvider.jobs[_cardIndex]);
       _saveJobs();
       _advanceCard();
@@ -148,7 +131,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     });
   }
 
-  // UPDATED: Needs to check length against provider's list
   void _animateAndReject() {
     final jobProvider = context.read<JobProvider>();
     if (_isSwiping || _cardIndex >= jobProvider.jobs.length) return;
@@ -174,6 +156,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
       }
     });
   }
+  // ---
 
   // --- Navigation Methods (No changes here) ---
   void _showJobDetails(JobModel job) {
@@ -202,7 +185,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // NEW: Watch the provider for state changes
+    // Watch the provider for job list *and* score updates
     final jobProvider = context.watch<JobProvider>();
 
     return Scaffold(
@@ -221,12 +204,11 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      // NEW: Build the body based on the provider's state
       body: _buildBody(jobProvider),
     );
   }
 
-  // NEW: Helper widget to build the body based on provider state
+  // This widget now builds based on the job list provider state
   Widget _buildBody(JobProvider provider) {
     switch (provider.state) {
       case NotifierState.initial:
@@ -244,24 +226,27 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
           ),
         );
       case NotifierState.loaded:
-        // This is the original body, now returned only when data is loaded
+        // Data is loaded, show the swipe cards
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
             children: [
               Expanded(
-                // Use provider.jobs here
-                child: _cardIndex >= provider.jobs.length
+                child: provider.jobs.isEmpty
                     ? const Center(
-                        child: Text(
-                          "That's all for now!\nCheck back later.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 20, color: Colors.grey),
-                        ),
+                        child: Text("No jobs found."),
                       )
-                    : buildCardStack(provider.jobs), // Pass jobs list
+                    : _cardIndex >= provider.jobs.length
+                        ? const Center(
+                            child: Text(
+                              "That's all for now!\nCheck back later.",
+                              textAlign: TextAlign.center,
+                              style:
+                                  TextStyle(fontSize: 20, color: Colors.grey),
+                            ),
+                          )
+                        : buildCardStack(provider.jobs), // Pass jobs list
               ),
-              // Use provider.jobs here
               if (_cardIndex < provider.jobs.length) buildActionButtons(),
             ],
           ),
@@ -269,8 +254,13 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     }
   }
 
-  // UPDATED: Now takes the list of jobs as a parameter
+  /// This is the core logic.
+  /// It now gets the score from the provider and triggers API calls.
   Widget buildCardStack(List<JobModel> availableJobs) {
+    // We also need the user to send to Gemini
+    final authProvider = context.watch<AuthProvider>();
+    final user = authProvider.currentUser;
+
     return Stack(
       alignment: Alignment.center,
       children: List.generate(
@@ -278,18 +268,38 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
         (index) {
           final jobIndex = _cardIndex + index;
           final isTopCard = index == 0;
-          final card = availableJobs[jobIndex]; // Use passed list
-          final score = calculateMatchScore(card);
+          final card = availableJobs[jobIndex];
+          
+          // --- NEW SCORE LOGIC ---
+          // 1. Get the score data from the provider's cache
+          final key = card.title + card.company;
+          final scoreData = context.watch<JobProvider>().jobMatchScores[key];
 
-          // --- All animation logic below remains the same ---
+          int score = 0; // Default score
+
+          if (scoreData == null) {
+            // 2. If score isn't in cache, and we have a user,
+            //    and it's one of the top two cards, fetch it.
+            if (user != null && (isTopCard || index == 1)) {
+              // Use read() to "fire and forget" the API call
+              // The provider will notify when the score is ready
+              context.read<JobProvider>().fetchMatchScore(user: user, job: card);
+            }
+          } else {
+            // 3. If we have data, use it.
+            //    Default to 0 if score is negative (e.g., our -1 loading state)
+            score = (scoreData['score'] as int?) ?? 0;
+            if (score < 0) score = 0;
+          }
+          // --- END NEW SCORE LOGIC ---
+
+          // --- Animation logic (No changes) ---
           final dragAmount = _cardOffset.dx.abs();
           double scale = isTopCard ? 1.0 : max(0.9, 1.0 - (dragAmount / 1000));
           double top = isTopCard ? 0 : 10;
-
           if (!isTopCard) {
             top -= (dragAmount / 40);
           }
-
           final transform = Matrix4.identity()
             ..translate(_cardOffset.dx)
             ..rotateZ(_cardOffset.dx / (MediaQuery.of(context).size.width * 0.8));
@@ -316,7 +326,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
                     builder: (context, direction, _) {
                       return JobCard(
                         job: card,
-                        score: score,
+                        score: score, // <-- Pass the new score
                         swipeDirection:
                             isTopCard ? direction : SwipeDirection.none,
                       );

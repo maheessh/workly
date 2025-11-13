@@ -35,18 +35,18 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
    # File handling and document parsing
-  file_picker: ^8.0.0+1
+  file_picker: ^10.3.6
   path_provider: ^2.1.2
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   docx_to_text: ^1.0.1
   archive: ^3.6.1
 
   # Authentication and state management
   http: ^1.2.1
-  firebase_core: ^3.6.0
-  firebase_auth: ^5.3.1
-  google_sign_in: ^6.2.1
-  cloud_firestore: 5.6.12
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  google_sign_in: ^6.3.0
+  cloud_firestore: ^6.1.0
   google_generative_ai: ^0.4.3
   provider: ^6.1.2
   shared_preferences: ^2.2.2
@@ -62,7 +62,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

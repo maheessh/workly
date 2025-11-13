@@ -5,10 +5,7 @@ import '../models/user_model.dart';
 import '../models/job_model.dart';
 
 class GeminiMatchingService {
-  // --- PASTE YOUR API KEY HERE ---
-  // ⚠️ WARNING: For a real app, store this securely (like in a .env file),
-  // not directly in your code.
-  static const String _geminiApiKey = 'AIzaSyCt4mW7lzomvOsHOsG8ISdftI4_zv-JZfY';
+  static const String _geminiApiKey = 'AIzaSyBg0bYzNqyw5tH_p_AM0PSaVvmhGeFhYjY';
 
   static GenerativeModel? _model;
 
@@ -17,9 +14,17 @@ class GeminiMatchingService {
       throw Exception('Please add your Gemini API Key to gemini_matching_service.dart');
     }
     _model ??= GenerativeModel(
-      // Use 'gemini-1.5-flash' - it's the fastest model
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash', // Using your specific model
       apiKey: _geminiApiKey,
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+      ),
+      safetySettings: [
+        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+      ],
     );
     return _model!;
   }
@@ -32,28 +37,24 @@ class GeminiMatchingService {
     try {
       final model = _getGenerativeModel();
 
-      // 1. Convert your Dart objects to JSON strings
       final userJson = jsonEncode(user.toJson());
-      final jobJson = jsonEncode(job.toJson()); // Assumes JobModel has toJson()
-
-      // 2. This is the "prompt" - it's the most important part
+      final jobJson = jsonEncode(job.toJson());
       final prompt = _buildPrompt(userJson, jobJson);
 
-      // 3. Send the prompt to the API
       final response = await model.generateContent([Content.text(prompt)]);
       final jsonString = response.text;
 
-      if (jsonString == null) {
-        throw Exception('AI returned no data.');
+      // This is the fix for the FormatException.
+      // If safety settings block, the API returns an empty string.
+      if (jsonString == null || jsonString.trim().isEmpty) {
+        throw Exception('AI returned no data (empty response). Check safety settings or API key.');
       }
 
-      // 4. Clean and parse the JSON response from the AI
-      final cleanedJson = jsonString
-          .replaceAll('```json', '')
-          .replaceAll('```', '')
-          .trim();
-      
-      final Map<String, dynamic> result = jsonDecode(cleanedJson);
+      debugPrint('Gemini JSON Response: $jsonString');
+
+      // Because we use responseMimeType: 'application/json',
+      // we can parse directly. No regex needed.
+      final Map<String, dynamic> result = jsonDecode(jsonString);
       return result;
 
     } catch (e) {
@@ -61,17 +62,18 @@ class GeminiMatchingService {
       return {
         'score': 0,
         'positiveMatchReason': 'Error: Could not calculate score.',
-        'negativeMatchReason': '',
+        'negativeMatchReason': 'Check API key, billing, or model name.',
+        'resumeSuggestion': 'N/A', // Add defaults for new fields
+        'coverLetterSuggestion': 'N/A',
       };
     }
   }
 
   /// Creates the specialized prompt for the AI
   static String _buildPrompt(String userJson, String jobJson) {
+    // We've added two new fields: resumeSuggestion and coverLetterSuggestion
     return '''
-    You are an expert HR recruiter and data analyst. Your task is to calculate a job match score.
-
-    Analyze the following USER_PROFILE and JOB_DESCRIPTION.
+    You are an expert HR recruiter. Analyze the USER_PROFILE and JOB_DESCRIPTION.
     
     USER_PROFILE:
     $userJson
@@ -79,21 +81,13 @@ class GeminiMatchingService {
     JOB_DESCRIPTION:
     $jobJson
 
-    Based on this data, please provide a match score from 0 to 100.
-    - 100 is a perfect match.
-    - 0 is no match at all.
-
-    Pay close attention to:
-    1.  **Skills:** How well do the user's skills match the job's required skills?
-    2.  **Experience:** Does the user's experience (e.g., "Senior") match the job's (e.g., "Mid-Level")? "Senior" can match "Mid-Level", but "Entry-Level" cannot match "Senior".
-    3.  **Context:** Read the user's summary and the job's description for contextual matches.
-
-    Respond *only* with a valid JSON object in the following format. Do not add any text before or after the JSON.
-
+    Respond ONLY with a valid JSON object in the following format:
     {
-      "score": <number>,
+      "score": <number from 0-100>,
       "positiveMatchReason": "<A single, concise sentence (max 15 words) explaining the strongest reason for this match.>",
-      "negativeMatchReason": "<A single, concise sentence (max 15 words) explaining the biggest missing piece or mismatch.>"
+      "negativeMatchReason": "<A single, concise sentence (max 15 words) explaining the biggest missing piece or mismatch.>",
+      "resumeSuggestion": "<A short, actionable, one-sentence suggestion for the user's resume.>",
+      "coverLetterSuggestion": "<A short, actionable, one-sentence suggestion for the user's cover letter.>"
     }
     ''';
   }
