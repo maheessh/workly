@@ -7,71 +7,108 @@ import '../models/job_model.dart';
 class GeminiMatchingService {
   static const String _geminiApiKey = 'AIzaSyBg0bYzNqyw5tH_p_AM0PSaVvmhGeFhYjY';
 
-  static GenerativeModel? _model;
+  static GenerativeModel? _jsonModel;
+  static GenerativeModel? _textModel;
+  static final _safetySettings = [
+    SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+    SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+    SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+    SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+  ];
 
-  static GenerativeModel _getGenerativeModel() {
+  static GenerativeModel _getJsonModel() {
     if (_geminiApiKey == 'YOUR_API_KEY_HERE') {
-      throw Exception('Please add your Gemini API Key to gemini_matching_service.dart');
+      throw Exception('Please add your Gemini API Key');
     }
-    _model ??= GenerativeModel(
-      model: 'gemini-2.5-flash', // Using your specific model
+    _jsonModel ??= GenerativeModel(
+      model: 'gemini-2.5-flash',
       apiKey: _geminiApiKey,
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
       ),
-      safetySettings: [
-        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
-      ],
+      safetySettings: _safetySettings,
     );
-    return _model!;
+    return _jsonModel!;
   }
 
-  /// Calculates a match score by sending user and job data to Gemini.
+  static GenerativeModel _getTextModel() {
+    if (_geminiApiKey == 'YOUR_API_KEY_HERE') {
+      throw Exception('Please add your Gemini API Key');
+    }
+    _textModel ??= GenerativeModel(
+      model: 'gemini-2.5-flash',
+      apiKey: _geminiApiKey,
+      safetySettings: _safetySettings,
+    );
+    return _textModel!;
+  }
+
+  /// Wraps an API call with exponential backoff for retries.
+  static Future<T> _withRetry<T>(Future<T> Function() apiCall) async {
+    // (This retry logic function is unchanged)
+    int retries = 0;
+    int maxRetries = 3;
+    Duration delay = const Duration(seconds: 1);
+
+    while (retries < maxRetries) {
+      try {
+        return await apiCall();
+      } catch (e) {
+        if (e.toString().contains('503') || e.toString().contains('UNAVAILABLE')) {
+          retries++;
+          if (retries >= maxRetries) {
+            debugPrint('Gemini API overloaded. Max retries reached. Failing.');
+            throw e;
+          }
+          debugPrint('Gemini API overloaded. Retrying in ${delay.inSeconds}s... ($retries/$maxRetries)');
+          await Future.delayed(delay);
+          delay *= 2;
+        } else {
+          throw e;
+        }
+      }
+    }
+    throw Exception('Retry loop failed unexpectedly.');
+  }
+
+  // ===================================================================
+  // FEATURE 1: JOB MATCH SCORE
+  // ===================================================================
   static Future<Map<String, dynamic>> getMatchScore({
     required UserModel user,
     required JobModel job,
   }) async {
+    // (This function is unchanged)
     try {
-      final model = _getGenerativeModel();
-
+      final model = _getJsonModel();
       final userJson = jsonEncode(user.toJson());
       final jobJson = jsonEncode(job.toJson());
-      final prompt = _buildPrompt(userJson, jobJson);
+      final prompt = _buildMatchPrompt(userJson, jobJson);
 
-      final response = await model.generateContent([Content.text(prompt)]);
+      final response = await _withRetry(() => model.generateContent([Content.text(prompt)]));
+      
       final jsonString = response.text;
 
-      // This is the fix for the FormatException.
-      // If safety settings block, the API returns an empty string.
       if (jsonString == null || jsonString.trim().isEmpty) {
-        throw Exception('AI returned no data (empty response). Check safety settings or API key.');
+        throw Exception('AI returned no data (empty response).');
       }
 
       debugPrint('Gemini JSON Response: $jsonString');
-
-      // Because we use responseMimeType: 'application/json',
-      // we can parse directly. No regex needed.
-      final Map<String, dynamic> result = jsonDecode(jsonString);
-      return result;
-
+      return jsonDecode(jsonString);
     } catch (e) {
-      debugPrint('Error with Gemini API: $e');
+      debugPrint('Error with Gemini API (getMatchScore): $e');
       return {
         'score': 0,
         'positiveMatchReason': 'Error: Could not calculate score.',
-        'negativeMatchReason': 'Check API key, billing, or model name.',
-        'resumeSuggestion': 'N/A', // Add defaults for new fields
+        'negativeMatchReason': e.toString(),
+        'resumeSuggestion': 'N/A',
         'coverLetterSuggestion': 'N/A',
       };
     }
   }
 
-  /// Creates the specialized prompt for the AI
-  static String _buildPrompt(String userJson, String jobJson) {
-    // We've added two new fields: resumeSuggestion and coverLetterSuggestion
+  static String _buildMatchPrompt(String userJson, String jobJson) {
+    // (This prompt is unchanged)
     return '''
     You are an expert HR recruiter. Analyze the USER_PROFILE and JOB_DESCRIPTION.
     
@@ -89,6 +126,93 @@ class GeminiMatchingService {
       "resumeSuggestion": "<A short, actionable, one-sentence suggestion for the user's resume.>",
       "coverLetterSuggestion": "<A short, actionable, one-sentence suggestion for the user's cover letter.>"
     }
+    ''';
+  }
+
+  // ===================================================================
+  // FEATURE 2: COVER LETTER GENERATOR
+  // ===================================================================
+  static Future<String> generateCoverLetter({
+    required UserModel user,
+    required JobModel job,
+  }) async {
+    // (This function is unchanged)
+    try {
+      final model = _getTextModel();
+      final userJson = jsonEncode(user.toJson());
+      final jobJson = jsonEncode(job.toJson());
+      final prompt = _buildCoverLetterPrompt(userJson, jobJson);
+
+      final response = await _withRetry(() => model.generateContent([Content.text(prompt)]));
+      
+      return response.text ?? "Error: Could not generate cover letter.";
+    } catch (e) {
+      debugPrint('Error with Gemini API (generateCoverLetter): $e');
+      return "An error occurred while generating your cover letter. Please try again.";
+    }
+  }
+
+  static String _buildCoverLetterPrompt(String userJson, String jobJson) {
+    // (This prompt is unchanged)
+    return '''
+    You are a professional career coach. A user is applying for a job.
+    ...
+    Respond *only* with the full text of the cover letter. Do not add any text like "Here is the cover letter:"
+    ''';
+  }
+
+  // ===================================================================
+  // --- MODIFICATION: Renamed and added a new "start" function ---
+  // ===================================================================
+
+  // --- NEW FUNCTION ---
+  /// Starts a new chat session for the general AI Career Coach.
+  static ChatSession startAiCoachChat() {
+    final model = _getTextModel();
+    final systemPrompt = _buildAiCoachSystemPrompt();
+    // Return a chat session with just the system prompt
+    return model.startChat(history: [Content.text(systemPrompt)]);
+  }
+
+  /// Starts a new chat session for a *specific* mock interview.
+  static ChatSession startInterviewChat({required JobModel job}) {
+    final model = _getTextModel();
+    final systemPrompt = _buildInterviewSystemPrompt(job);
+    // Return a chat session with just the system prompt
+    return model.startChat(history: [Content.text(systemPrompt)]);
+  }
+
+  // --- RENAMED FUNCTION (was sendInterviewMessage) ---
+  /// Sends a message to an *existing* chat session (for either Coach or Interview).
+  static Future<String> sendChatMessage({
+    required ChatSession chat,
+    required String message,
+  }) async {
+    try {
+      final response = await _withRetry(() => chat.sendMessage(Content.text(message)));
+      return response.text ?? "Error: No response from AI.";
+    } catch (e) {
+      debugPrint('Error with Gemini API (sendChatMessage): $e');
+      return "An error occurred. Please try again.";
+    }
+  }
+
+  // --- NEW PROMPT ---
+  static String _buildAiCoachSystemPrompt() {
+    return '''
+    You are "Workly", an expert career coach and AI assistant. 
+    The user will ask you general questions about job searching, resume writing, interview tips, or career advice. 
+    Be friendly, encouraging, and provide clear, actionable advice.
+    Start the conversation by introducing yourself and asking how you can help.
+    ''';
+  }
+
+  static String _buildInterviewSystemPrompt(JobModel job) {
+    // (This prompt is unchanged)
+    return '''
+    You are an expert HR manager at ${job.company}, hiring for the ${job.title} role. 
+    ...
+    Ask a mix of behavioral ("Tell me about a time...") and technical questions...
     ''';
   }
 }

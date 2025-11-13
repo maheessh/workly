@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <-- 1. ADD FOR CLIPBOARD
+import 'package:job_tinder/services/gemini_matching_score.dart';
 import 'package:job_tinder/themes/app_theme.dart';
-import 'package:job_tinder/providers/auth_provider.dart'; // <-- ADDED
-import 'package:job_tinder/providers/job_provider.dart'; // <-- ADDED
-import 'package:provider/provider.dart'; // <-- ADDED
+import 'package:job_tinder/providers/auth_provider.dart';
+import 'package:job_tinder/providers/job_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/job_model.dart';
 
-// 1. CONVERT TO STATEFUL WIDGET
 class JobDetailScreen extends StatefulWidget {
   final JobModel job;
   const JobDetailScreen({super.key, required this.job});
@@ -16,13 +17,14 @@ class JobDetailScreen extends StatefulWidget {
 }
 
 class _JobDetailScreenState extends State<JobDetailScreen> {
-  // 2. ADD INITSTATE TO FETCH SCORE IF NEEDED
+  // --- 3. ADD STATE FOR COVER LETTER ---
+  bool _isGeneratingLetter = false;
+  String? _coverLetter;
+  // ---
+
   @override
   void initState() {
     super.initState();
-    // Check if the score is already in the provider.
-    // If not, fetch it. This is useful if the user
-    // comes from a "saved jobs" list.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final jobProvider = context.read<JobProvider>();
       final authProvider = context.read<AuthProvider>();
@@ -31,18 +33,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       final key = widget.job.title + widget.job.company;
       final scoreData = jobProvider.jobMatchScores[key];
 
-      // If we don't have a user, or score is loading/fetched, do nothing
       if (user == null || scoreData != null) {
         return;
       }
       
-      // We have no data for this job, so let's fetch it.
       jobProvider.fetchMatchScore(user: user, job: widget.job);
     });
   }
 
   /// Launches the provided URL string in an external browser.
   Future<void> _launchURL(BuildContext context, String urlString) async {
+    // (No changes to this function)
     final Uri url = Uri.parse(urlString);
     if (urlString.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -59,9 +60,41 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
+  // --- 4. ADD METHOD TO GENERATE COVER LETTER ---
+  Future<void> _generateCoverLetter() async {
+    setState(() {
+      _isGeneratingLetter = true;
+      _coverLetter = null; // Clear old one if any
+    });
+
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.currentUser;
+    
+    if (user == null) {
+      setState(() => _isGeneratingLetter = false);
+      return; // Should not happen if user is on this screen
+    }
+
+    try {
+      final generatedText = await GeminiMatchingService.generateCoverLetter(
+        user: user,
+        job: widget.job,
+      );
+      setState(() {
+        _coverLetter = generatedText;
+        _isGeneratingLetter = false;
+      });
+    } catch (e) {
+      setState(() {
+        _coverLetter = "An error occurred. Please try again.";
+        _isGeneratingLetter = false;
+      });
+    }
+  }
+  // ---
+
   @override
   Widget build(BuildContext context) {
-    // 3. GET THE JOBPROVIDER TO READ THE SCORE DATA
     final jobProvider = context.watch<JobProvider>();
     final key = widget.job.title + widget.job.company;
     final scoreData = jobProvider.jobMatchScores[key];
@@ -70,6 +103,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            // (No changes to SliverAppBar)
             expandedHeight: 200.0,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
@@ -138,8 +172,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     _buildDetailSection(
                       context,
                       'Required Skills',
-                      null, // Use child for skills
+                      null, 
                       child: Wrap(
+                        // (No changes to this Wrap)
                         spacing: 8.0,
                         runSpacing: 4.0,
                         children: widget.job.requiredSkills.isEmpty
@@ -168,10 +203,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       widget.job.description,
                     ),
 
-                    // --- 4. ADD THE NEW AI SUGGESTIONS SECTION ---
                     _buildAiSuggestions(context, scoreData),
+                    
+                    // --- 5. ADD THE NEW COVER LETTER WIDGET ---
+                    if (_isGeneratingLetter || _coverLetter != null)
+                      _buildCoverLetterSection(),
                     // ---
-
+                    
                     const SizedBox(height: 40),
                     ElevatedButton(
                       onPressed: () => _launchURL(context, widget.job.applylink),
@@ -188,7 +226,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
-  // 5. NEW WIDGET TO BUILD THE AI SECTION
   Widget _buildAiSuggestions(
       BuildContext context, Map<String, dynamic>? scoreData) {
     // Show a loading spinner if data is null (not fetched)
@@ -207,7 +244,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       );
     }
 
-    // Get the data (with defaults just in case)
     final positive = scoreData['positiveMatchReason'] ?? 'N/A';
     final negative = scoreData['negativeMatchReason'] ?? 'N/A';
     final resume = scoreData['resumeSuggestion'] ?? 'N/A';
@@ -236,14 +272,86 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 Icons.article, resume, AppTheme.primaryColor),
             _buildSuggestionRow(
                 Icons.description, coverLetter, AppTheme.primaryColor),
+            
+            // --- 6. ADD THE GENERATE BUTTON ---
+            const Divider(height: 24),
+            if (!_isGeneratingLetter)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _generateCoverLetter,
+                  icon: const Icon(Icons.auto_awesome, size: 20),
+                  label: const Text('Generate Cover Letter'),
+                ),
+              ),
+            // ---
           ],
         ),
       ),
     );
   }
 
+  // --- 7. ADD WIDGET TO DISPLAY THE COVER LETTER ---
+  Widget _buildCoverLetterSection() {
+    return _buildDetailSection(
+      context,
+      'Generated Cover Letter',
+      null,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_isGeneratingLetter)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('Generating your letter...'),
+                    ],
+                  ),
+                ),
+              )
+            else if (_coverLetter != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _coverLetter!,
+                    style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: _coverLetter!));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Cover letter copied to clipboard!')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: const Text('Copy to Clipboard'),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  // ---
+
   // Helper for the suggestion row
   Widget _buildSuggestionRow(IconData icon, String text, Color color) {
+    // (No changes to this function)
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
@@ -265,6 +373,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   // This is your existing helper, no changes needed
   Widget _buildDetailSection(BuildContext context, String title, String? content,
       {Widget? child}) {
+    // (No changes to this function)
     return Padding(
       padding: const EdgeInsets.only(bottom: 24.0),
       child: Column(
