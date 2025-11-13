@@ -20,14 +20,14 @@ class SavedJobsService {
         'requiredSkills': job.requiredSkills.toList(),
         'description': job.description,
         'companyLogo': job.companyLogo.codePoint, // Convert IconData to int
-        'applylink': job.applylink,               // <-- ADDED
+        'applylink': job.applylink,
       }).toList();
       
       final jsonString = jsonEncode(jobsJson);
       await prefs.setString(_savedJobsKey, jsonString);
     } catch (e) {
-      // Handle error silently, or log it
-      print('Error saving jobs: $e');
+      // Handle error, e.g., log it
+      debugPrint('Error saving jobs: $e');
     }
   }
   
@@ -49,14 +49,14 @@ class SavedJobsService {
           requiredSkills: (jobData['requiredSkills'] as List<dynamic>?)?.map((e) => e.toString()).toSet() ?? <String>{},
           description: jobData['description'] ?? '',
           companyLogo: IconData(jobData['companyLogo'] as int? ?? 0xe7f1, fontFamily: 'MaterialIcons'), // 0xe7f1 is Icons.business
-          applylink: jobData['applylink'] ?? '', // <-- ADDED
+          applylink: jobData['applylink'] ?? '',
         )).toList();
         
         return jobs;
       }
     } catch (e) {
-      // Handle error silently, or log it
-      print('Error loading jobs: $e');
+      // Handle error, e.g., log it
+      debugPrint('Error loading jobs: $e');
     }
     // Return an empty list if anything fails
     return [];
@@ -68,8 +68,8 @@ class SavedJobsService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_savedJobsKey);
     } catch (e) {
-      // Handle error silently
-      print('Error clearing jobs: $e');
+      // Handle error, e.g., log it
+      debugPrint('Error clearing jobs: $e');
     }
   }
 }

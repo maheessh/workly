@@ -1,4 +1,3 @@
-// lib/screens/job_swipe_screen.dart
 import 'package:flutter/material.dart';
 import 'package:job_tinder/services/saved_jobs_service.dart';
 import 'package:provider/provider.dart';
@@ -7,11 +6,12 @@ import 'package:job_tinder/themes/app_theme.dart';
 import 'dart:math';
 
 import '../models/job_model.dart';
-import '../models/user_model.dart'; // <-- ADD THIS
+import '../models/user_model.dart'; // <-- IMPORT USER_MODEL (needed for score logic)
 import '../providers/auth_provider.dart';
 import '../providers/job_provider.dart';
 import 'profile_screen.dart';
 import 'job_detail_screen.dart';
+import 'ai_coach_screen.dart'; // <-- 1. IMPORT THE NEW SCREEN
 import '../widgets/job_card.dart';
 
 class JobSwipeScreen extends StatefulWidget {
@@ -22,29 +22,26 @@ class JobSwipeScreen extends StatefulWidget {
 }
 
 class _JobSwipeScreenState extends State<JobSwipeScreen> {
+  // (State variables are unchanged)
   final List<JobModel> _savedJobs = [];
   int _cardIndex = 0;
-
-  // --- Animation State (No changes here) ---
   Offset _cardOffset = Offset.zero;
   final ValueNotifier<SwipeDirection> _swipeDirection =
       ValueNotifier(SwipeDirection.none);
   bool _isSwiping = false;
   final Duration _animationDuration = const Duration(milliseconds: 300);
-  // ---
 
   @override
   void initState() {
+    // (initState is unchanged)
     super.initState();
     _loadSavedJobs();
-
-    // Fetch the list of jobs from Google Sheets
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<JobProvider>().fetchJobs();
     });
   }
 
-  // --- Utility/State Methods (No changes to _loadSavedJobs or _saveJobs) ---
+  // (All methods from _loadSavedJobs to _animateAndReject are unchanged)
   Future<void> _loadSavedJobs() async {
     final savedJobs = await SavedJobsService.loadSwipedJobs();
     setState(() {
@@ -55,12 +52,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   Future<void> _saveJobs() async {
     await SavedJobsService.saveSwipedJobs(_savedJobs);
   }
-  // ---
 
-  // 🔴 REMOVED: The old `calculateMatchScore` function is gone.
-  // int calculateMatchScore(JobModel job) { ... }
-
-  // --- Pan/Drag Handlers (No changes here) ---
   void _onPanUpdate(DragUpdateDetails details) {
     if (_isSwiping) return;
     setState(() {
@@ -91,9 +83,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
       });
     }
   }
-  // ---
 
-  // --- Animation Methods (No changes here) ---
   void _advanceCard() {
     setState(() {
       _cardOffset = Offset.zero;
@@ -158,7 +148,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   }
   // ---
 
-  // --- Navigation Methods (No changes here) ---
+  // --- NAVIGATION METHODS ---
   void _showJobDetails(JobModel job) {
     Navigator.push(
       context,
@@ -178,8 +168,17 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     Navigator.push(context,
             MaterialPageRoute(builder: (context) => const ProfileScreen()))
         .then((_) {
+      // Use setState to trigger a rebuild in case user details (for matching) changed
       setState(() {});
     });
+  }
+
+  // --- 2. ADD THIS NEW NAVIGATION METHOD ---
+  void _goToAiCoach() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AiCoachScreen()),
+    );
   }
   // ---
 
@@ -193,12 +192,23 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
         title: const Text('Discover Jobs'),
         leading: IconButton(
           icon: const Icon(Icons.person_outline, color: AppTheme.subTextColor),
+          tooltip: 'Profile',
           onPressed: _goToProfile,
         ),
         actions: [
+          // --- 3. ADD THIS NEW BUTTON ---
+          IconButton(
+            icon: const Icon(Icons.auto_awesome, // AI/Sparkle icon
+                color: Color.fromARGB(255, 128, 13, 13),
+                size: 26),
+            tooltip: 'AI Coach',
+            onPressed: _goToAiCoach,
+          ),
+          // ---
           IconButton(
             icon: const Icon(Icons.bookmark_border,
                 color: AppTheme.subTextColor, size: 28),
+            tooltip: 'Saved Jobs',
             onPressed: _goToSavedJobs,
           ),
           const SizedBox(width: 8),
@@ -208,7 +218,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     );
   }
 
-  // This widget now builds based on the job list provider state
+  // (The _buildBody function is unchanged)
   Widget _buildBody(JobProvider provider) {
     switch (provider.state) {
       case NotifierState.initial:
@@ -254,8 +264,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     }
   }
 
-  /// This is the core logic.
-  /// It now gets the score from the provider and triggers API calls.
+  // (The buildCardStack function is unchanged)
   Widget buildCardStack(List<JobModel> availableJobs) {
     // We also need the user to send to Gemini
     final authProvider = context.watch<AuthProvider>();
@@ -269,10 +278,11 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
           final jobIndex = _cardIndex + index;
           final isTopCard = index == 0;
           final card = availableJobs[jobIndex];
-          
+
           // --- NEW SCORE LOGIC ---
           // 1. Get the score data from the provider's cache
           final key = card.title + card.company;
+          // Use watch() here to make sure the widget rebuilds when the score arrives
           final scoreData = context.watch<JobProvider>().jobMatchScores[key];
 
           int score = 0; // Default score
@@ -341,7 +351,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     );
   }
 
-  // Action buttons (No changes needed)
+  // (The buildActionButtons function is unchanged)
   Widget buildActionButtons() {
     return Padding(
       padding: const EdgeInsets.only(top: 20.0),
