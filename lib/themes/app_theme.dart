@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // --- COLORS ---
-  static const Color primaryColor = Color(0xFF3A86FF); // A vibrant, modern blue
-  static const Color secondaryColor = Color(0xFF50C878); // A friendly green
-  static const Color backgroundColor = Color(0xFFF9F9F9); // A slightly off-white, clean background
-  static const Color textColor = Color(0xFF1A1A1A); // Dark, readable text
-  static const Color subTextColor = Color(0xFF6E6E6E); // For subheadings and descriptions
+  static const Color primaryColor = Color(0xFF3A86FF); 
+  static const Color secondaryColor = Color(0xFF50C878); 
+  static const Color backgroundColor = Color(0xFFF9F9F9); 
+  static const Color textColor = Color(0xFF1A1A1A); 
+  static const Color subTextColor = Color(0xFF6E6E6E); 
 
   // --- TEXT STYLES ---
   static const TextTheme _textTheme = TextTheme(

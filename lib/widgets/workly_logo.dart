@@ -10,7 +10,7 @@ class WorklyLogo extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.insights, color: AppTheme.primaryColor, size: size), // A "smart" icon
+        Icon(Icons.insights, color: AppTheme.primaryColor, size: size),
         const SizedBox(width: 10),
         Text(
           'Workly',
