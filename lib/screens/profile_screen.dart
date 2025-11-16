@@ -1,7 +1,7 @@
 // lib/screens/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:job_tinder/themes/app_theme.dart';
+// import 'package:job_tinder/themes/app_theme.dart'; // AppTheme isn't used here
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../services/file_upload_service.dart';
@@ -64,6 +64,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     _animationController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _locationController.dispose();
+    _summaryController.dispose();
+    _portfolioController.dispose();
+    _githubController.dispose();
+    _linkedinController.dispose();
+    _skillsController.dispose();
     super.dispose();
   }
 
@@ -75,8 +84,63 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (extracted != null) {
       final parsed = UserModel.fromJson(extracted);
       setState(() {
-        _user.resumeFileName = extracted['fileName'] ?? "resume.pdf";
-        if (parsed.skills.isNotEmpty) _user.skills.addAll(parsed.skills);
+        // File details
+        _user.resumeFileName = extracted['fileName'] ?? _user.resumeFileName;
+        _user.resumeFilePath =
+            extracted['resumeFilePath'] ?? _user.resumeFilePath;
+
+        // Merge scalar fields if present
+        if (parsed.name.isNotEmpty) {
+          _user.name = parsed.name;
+          _nameController.text = parsed.name;
+        }
+        if (parsed.email.isNotEmpty) {
+          _user.email = parsed.email;
+          _emailController.text = parsed.email;
+        }
+        if (parsed.phoneNumber.isNotEmpty) {
+          _user.phoneNumber = parsed.phoneNumber;
+          _phoneController.text = parsed.phoneNumber;
+        }
+        if (parsed.location.isNotEmpty) {
+          _user.location = parsed.location;
+          _locationController.text = parsed.location;
+        }
+        if (parsed.summary.isNotEmpty) {
+          _user.summary = parsed.summary;
+          _summaryController.text = parsed.summary;
+        }
+        if (parsed.portfolioUrl.isNotEmpty) {
+          _user.portfolioUrl = parsed.portfolioUrl;
+          _portfolioController.text = parsed.portfolioUrl;
+        }
+        if (parsed.githubUrl.isNotEmpty) {
+          _user.githubUrl = parsed.githubUrl;
+          _githubController.text = parsed.githubUrl;
+        }
+        if (parsed.linkedinUrl.isNotEmpty) {
+          _user.linkedinUrl = parsed.linkedinUrl;
+          _linkedinController.text = parsed.linkedinUrl;
+        }
+        if (parsed.experience.isNotEmpty) {
+          _user.experience = parsed.experience;
+        }
+
+        // Collections
+        if (parsed.skills.isNotEmpty) {
+          // Add only unique skills
+          for (var skill in parsed.skills) {
+            if (!_user.skills.contains(skill)) {
+              _user.skills.add(skill);
+            }
+          }
+        }
+        if (parsed.workExperience.isNotEmpty) {
+          _user.workExperience = List<String>.from(parsed.workExperience);
+        }
+        if (parsed.education.isNotEmpty) {
+          _user.education = List<String>.from(parsed.education);
+        }
       });
     }
 
@@ -105,6 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       portfolioUrl: _portfolioController.text.trim(),
       githubUrl: _githubController.text.trim(),
       linkedinUrl: _linkedinController.text.trim(),
+      // Note: experience and skills are already updated via setState
     );
 
     await Provider.of<AuthProvider>(context, listen: false)
@@ -130,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: Padding(padding: const EdgeInsets.all(14), child: child),
       );
 
-  /// NEW **Upload Resume Button** — replaces the old OutlinedButton
   Widget _buildUploadResumeButton() {
     return SizedBox(
       width: double.infinity,
@@ -171,7 +235,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
-
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(115),
         child: Container(
@@ -190,7 +253,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ),
-
       floatingActionButton: SizedBox(
         width: isDesktop ? 380 : width * 0.9,
         child: FloatingActionButton.extended(
@@ -204,7 +266,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-
       body: SlideTransition(
         position: Tween(begin: const Offset(0, .05), end: Offset.zero)
             .animate(CurvedAnimation(
@@ -221,6 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     if (_user.isGuest)
                       Container(
                         padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                             color: Colors.amber.shade100,
                             borderRadius: BorderRadius.circular(10)),
@@ -228,30 +290,53 @@ class _ProfileScreenState extends State<ProfileScreen>
                             "👤 Guest Mode — profile not stored in cloud",
                             style: TextStyle(fontSize: 13)),
                       ),
-
+                    _sectionTitle("Start with your Resume"),
+                    _card(
+                      child: Column(
+                        children: [
+                          _buildUploadResumeButton(),
+                          const SizedBox(height: 12),
+                          const Text(
+                            "Uploading will auto-fill your profile details.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
                     _sectionTitle("Basic Info"),
                     _card(
                       child: Column(children: [
                         TextFormField(
                           controller: _nameController,
-                          decoration: const InputDecoration(labelText: "Full Name *"),
+                          decoration:
+                              const InputDecoration(labelText: "Full Name *"),
                           validator: (v) =>
                               v!.isEmpty ? "Name required" : null,
                         ),
+                        // --- ADDED SPACING ---
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _emailController,
-                          decoration: const InputDecoration(labelText: "Email *"),
+                          decoration:
+                              const InputDecoration(labelText: "Email *"),
                           validator: (v) =>
                               !v!.contains("@") ? "Enter valid email" : null,
                         ),
+                        // --- ADDED SPACING ---
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _phoneController,
                           decoration:
                               const InputDecoration(labelText: "Phone Number"),
                         ),
+                        // --- ADDED SPACING ---
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _locationController,
-                          decoration: const InputDecoration(labelText: "Location"),
+                          decoration:
+                              const InputDecoration(labelText: "Location"),
                         ),
                       ]),
                     ),
@@ -271,7 +356,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: DropdownButtonFormField(
                         value: _user.experience.isEmpty
                             ? "Entry-Level"
-                            : _user.experience,
+                            : _experienceOptions.contains(_user.experience)
+                                ? _user.experience
+                                : "Entry-Level",
                         items: _experienceOptions
                             .map((e) =>
                                 DropdownMenuItem(value: e, child: Text(e)))
@@ -325,22 +412,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                           decoration:
                               const InputDecoration(labelText: "Portfolio URL"),
                         ),
+                        // --- ADDED SPACING ---
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _githubController,
                           decoration:
                               const InputDecoration(labelText: "GitHub URL"),
                         ),
+                        // --- ADDED SPACING ---
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _linkedinController,
                           decoration:
                               const InputDecoration(labelText: "LinkedIn URL"),
                         ),
                       ]),
-                    ),
-
-                    _sectionTitle("Resume Upload"),
-                    _card(
-                      child: _buildUploadResumeButton(),
                     ),
 
                     const SizedBox(height: 100),
