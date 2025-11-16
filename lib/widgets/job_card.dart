@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:job_tinder/models/swipe_direction.dart';
 import 'package:job_tinder/themes/app_theme.dart';
@@ -23,176 +24,253 @@ class JobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleSkills = job.requiredSkills.take(5).toList();
-    final otherSkillsCount = job.requiredSkills.length - visibleSkills.length;
+    final visibleSkills = job.requiredSkills.take(4).toList();
+    final other = job.requiredSkills.length - visibleSkills.length;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
         color: Colors.white,
-        borderRadius: BorderRadius.circular(34),
         boxShadow: [
           BoxShadow(
-            color: Colors.black12.withOpacity(0.07),
-            blurRadius: 25,
-            offset: const Offset(0, 8),
+              color: Colors.black12.withOpacity(.08),
+              blurRadius: 25,
+              offset: const Offset(0, 12))
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: [
+            // ---------------------------
+            //          TOP IMAGE
+            // ---------------------------
+            Container(
+  height: 320,
+  width: double.infinity,
+  decoration: const BoxDecoration(
+    image: DecorationImage(
+      image: AssetImage("background.jpg"),
+      fit: BoxFit.cover,
+    ),
+  ),
+  child: Stack(
+    children: [
+      // Blur
+      Positioned.fill(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(color: Colors.black.withOpacity(0.35)),
+        ),
+      ),
+    ],
+  ),
+),
+
+
+            // ---------------------------
+            //    TOP LEFT BADGE
+            // ---------------------------
+            Positioned(
+              top: 20,
+              left: 20,
+              child: _glassBadge(job.experienceLevel),
+            ),
+
+            // -------------------------------
+            //     BOTTOM INFO OVERLAY
+            // -------------------------------
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _bottomOverlay(job, visibleSkills, other),
+            ),
+
+            // -------------------------------
+            //     SWIPE OVERLAYS
+            // -------------------------------
+            if (swipeDirection != SwipeDirection.none)
+              Positioned.fill(
+                child: _swipeStamp(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Glass Badge
+  // ----------------------------------------------------------
+  Widget _glassBadge(String level) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.25),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(.2)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.work_outline, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                level,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Bottom white card area (job details)
+  // ----------------------------------------------------------
+  Widget _bottomOverlay(
+      JobModel job, List<String> visibleSkills, int otherCount) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Job Title
+          Text(
+            job.title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          // Company + Location + Match score
+          Row(
+            children: [
+              Text(
+                job.company,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.location_on_rounded,
+                  size: 16, color: Colors.grey),
+              Text(
+                job.location,
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
+              ),
+              const Spacer(),
+              _matchScore(),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Skill chips
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final skill in visibleSkills) _skillChip(skill),
+              if (otherCount > 0) _skillChip("+$otherCount more"),
+            ],
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Company logo + name
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
-                      child: Icon(
-                        job.companyLogo,
-                        color: AppTheme.primaryColor,
-                        size: 32,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        job.company,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
+    );
+  }
 
-                const SizedBox(height: 16),
+  // ----------------------------------------------------------
+  // Skill Chips
+  // ----------------------------------------------------------
+  Widget _skillChip(String skill) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Text(
+        skill,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 
-                // Job Title
-                Text(
-                  job.title,
-                  style: const TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+  // ----------------------------------------------------------
+  // Match Score Pill
+  // ----------------------------------------------------------
+  Widget _matchScore() {
+    final color = getScoreColor(score);
 
-                const SizedBox(height: 6),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        "$score% Match",
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: color,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
 
-                // Location + match score
-                Row(
-                  children: [
-                    Icon(Icons.location_on_rounded,
-                        size: 18, color: Colors.grey.shade600),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        job.location,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: getScoreColor(score).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        "$score% Match",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: getScoreColor(score),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+  // ----------------------------------------------------------
+  // Swipe stamp (NOPE / SAVE)
+  // ----------------------------------------------------------
+  Widget _swipeStamp() {
+    final isSave = swipeDirection == SwipeDirection.right;
 
-                const SizedBox(height: 18),
-
-                // Skill tags limited
-                Wrap(
-                  spacing: 8,
-                  runSpacing: -6,
-                  children: [
-                    for (var skill in visibleSkills)
-                      Chip(
-                        label: Text(skill,
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600)),
-                        backgroundColor:
-                            AppTheme.primaryColor.withOpacity(0.08),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    if (otherSkillsCount > 0)
-                      Chip(
-                        label: Text("+$otherSkillsCount more",
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
-                        backgroundColor: Colors.grey.shade200,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
-
-                const SizedBox(height: 18), // maintains spacing safely
-
-              ],
+    return Center(
+      child: Transform.rotate(
+        angle: isSave ? -0.3 : 0.3,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSave ? AppTheme.secondaryColor : Colors.red,
+              width: 4,
             ),
           ),
-
-          // Swipe overlays
-          if (swipeDirection != SwipeDirection.none)
-            Positioned.fill(
-              child: Center(
-                child: Transform.rotate(
-                  angle: swipeDirection == SwipeDirection.right
-                      ? -0.3
-                      : 0.3,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: swipeDirection == SwipeDirection.right
-                            ? AppTheme.secondaryColor
-                            : Colors.red,
-                        width: 4,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      swipeDirection == SwipeDirection.right
-                          ? "SAVE"
-                          : "NOPE",
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w900,
-                        color: swipeDirection == SwipeDirection.right
-                            ? AppTheme.secondaryColor
-                            : Colors.red,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+          child: Text(
+            isSave ? "SAVE" : "NOPE",
+            style: TextStyle(
+              fontSize: 40,
+              fontWeight: FontWeight.w900,
+              color: isSave ? AppTheme.secondaryColor : Colors.red,
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
