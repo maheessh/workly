@@ -5,7 +5,7 @@ import '../models/user_model.dart';
 import '../models/job_model.dart';
 
 class GeminiMatchingService {
-  static const String _geminiApiKey = 'GEMINI_API_KEY_HERE';
+  static const String _geminiApiKey = 'REMOVED_SECRET';
 
   static GenerativeModel? _jsonModel;
   static GenerativeModel? _textModel;

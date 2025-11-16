@@ -1,6 +1,7 @@
 // lib/screens/job_swipe_screen.dart
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:job_tinder/services/saved_jobs_service.dart';
@@ -14,7 +15,6 @@ import 'profile_screen.dart';
 import 'job_detail_screen.dart';
 import 'saved_job_screen.dart';
 import 'ai_coach_screen.dart';
-
 
 class JobSwipeScreen extends StatefulWidget {
   const JobSwipeScreen({super.key});
@@ -202,18 +202,18 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
         title: _buildTopTitle(isMobile, isTablet, isDesktop),
         centerTitle: isDesktop,
         leading: IconButton(
-          icon: const Icon(Icons.person_outline, color: AppTheme.subTextColor),
+          icon: const Icon(CupertinoIcons.person_crop_circle),
           onPressed: _goToProfile,
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.auto_awesome,
+            icon: const Icon(CupertinoIcons.chat_bubble_text_fill,
                 color: Color.fromARGB(255, 128, 13, 13), size: 26),
             tooltip: 'AI Coach',
             onPressed: _goToAiCoach,
           ),
           IconButton(
-            icon: const Icon(Icons.bookmark_border,
+            icon: const Icon(CupertinoIcons.archivebox_fill,
                 color: AppTheme.subTextColor, size: 28),
             tooltip: 'Saved Jobs',
             onPressed: _goToSavedJobs,
@@ -229,16 +229,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
     // Center title for desktop, left for mobile/tablet
     final titleWidget = Column(
       crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-      children: [
-        Text('Discover',
-            style: TextStyle(
-                fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
-        Text(
-          'Chicago, IL',
-          style: TextStyle(fontSize: 13, color: AppTheme.subTextColor),
-        ),
-      ],
+      
     );
     return titleWidget;
   }
@@ -268,6 +259,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
     final jobs = provider.jobs;
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth;
+      // area for cards - responsive height limit
       final cardAreaHeight = min(MediaQuery.of(context).size.height * 0.72, 720.0);
 
       return Padding(
@@ -285,18 +277,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
                       : Stack(
                           alignment: Alignment.center,
                           children: [
-                            // Background subtle rounded container to mimic design
-                            Positioned.fill(
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(34),
-                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 12))],
-                                ),
-                              ),
-                            ),
-
                             // Card stack
                             buildCardStack(jobs),
                           ],
@@ -324,7 +304,7 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
 
-    // Limit rendered cards to two for performance and visual stack
+    // Limit rendered cards to three for performance and visual stack
     final toRender = min(3, availableJobs.length - _cardIndex);
 
     return Stack(
@@ -351,7 +331,9 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
         final baseOffset = Offset(0, index * 12.0);
         final slideOffset = isTopCard ? _cardOffset : Offset.zero;
         final totalOffset = baseOffset + slideOffset;
-        final rotation = isTopCard ? (_cardOffset.dx / (MediaQuery.of(context).size.width * 0.9)) : (index * -0.03);
+        final rotation = isTopCard
+            ? (_cardOffset.dx / (MediaQuery.of(context).size.width * 0.9))
+            : (index * -0.03);
 
         return Positioned(
           top: index * 8.0,
@@ -367,35 +349,25 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
                   duration: _animationDuration,
                   curve: Curves.easeOut,
                   width: min(MediaQuery.of(context).size.width, 560),
-                  // outer rounded shape to match mockup
+                  // Wrap the JobCard so it adapts and keeps its rounded look
                   child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      // Card content (use your JobCard widget, passing score)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: Material(
-                          color: Colors.white,
-                          child: JobCard(
-                            job: cardJob,
-                            score: score,
-                            swipeDirection: isTopCard ? _swipeDirection.value : SwipeDirection.none,
-                          ),
-                        ),
+                      // Card content (self-contained JobCard)
+                      JobCard(
+                        job: cardJob,
+                        score: score,
+                        swipeDirection: isTopCard
+                            ? _swipeDirection.value
+                            : SwipeDirection.none,
                       ),
-
-                      // Top-left distance badge (only on top card)
-                      if (isTopCard)
-                        Positioned(
-                          left: 16,
-                          top: 16,
-                          child: _distanceBadge(cardJob),
-                        ),
 
                       // Right translucent action icons stacked vertically (mimic heart/star/x)
                       if (isTopCard)
                         Positioned(
                           right: 12,
-                          bottom: 80,
+                          // position above the JobCard's bottom overlay
+                          bottom: 110,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -403,36 +375,27 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
                                 icon: Icons.close,
                                 onTap: _animateAndReject,
                                 color: Colors.white.withOpacity(0.95),
-                                bg: Colors.white.withOpacity(0.12),
+                                bg: Colors.black.withOpacity(0.18),
                               ),
                               const SizedBox(height: 12),
                               _roundIconButton(
                                 icon: Icons.star_border,
                                 onTap: () {
-                                  // optional: mark favorite on card
-                                  // keep behavior same as save
                                   _animateAndSave();
                                 },
                                 color: Colors.white.withOpacity(0.95),
-                                bg: Colors.white.withOpacity(0.12),
+                                bg: Colors.black.withOpacity(0.18),
                               ),
                               const SizedBox(height: 12),
                               _roundIconButton(
                                 icon: Icons.favorite,
                                 onTap: _animateAndSave,
                                 color: Colors.white.withOpacity(0.95),
-                                bg: Colors.white.withOpacity(0.14),
+                                bg: Colors.black.withOpacity(0.18),
                               ),
                             ],
                           ),
                         ),
-
-                      // Bottom-left overlay title (job title / company)
-                      Positioned(
-                        left: 18,
-                        bottom: 18,
-                        child: _cardTitleOverlay(cardJob),
-                      ),
                     ],
                   ),
                 ),
@@ -443,31 +406,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
       }).reversed.toList(),
     );
   }
-
-  Widget _distanceBadge(JobModel job) {
-  final jobType = job.experienceLevel.isNotEmpty
-      ? job.experienceLevel
-      : 'Job'; // fallback
-
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: Colors.black.withOpacity(0.7),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.work, color: Colors.white, size: 14),
-        const SizedBox(width: 6),
-        Text(
-          jobType,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      ],
-    ),
-  );
-}
-
 
   Widget _roundIconButton({
     required IconData icon,
@@ -487,26 +425,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen>
           border: Border.all(color: Colors.white.withOpacity(0.06)),
         ),
         child: Icon(icon, color: color, size: 22),
-      ),
-    );
-  }
-
-  Widget _cardTitleOverlay(JobModel job) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 360),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(job.title,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(job.company, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        ],
       ),
     );
   }
