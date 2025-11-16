@@ -1,18 +1,20 @@
-import 'package:flutter/material.dart';
-import 'package:job_tinder/services/saved_jobs_service.dart';
-import 'package:provider/provider.dart';
-import 'package:job_tinder/screens/saved_job_screen.dart';
-import 'package:job_tinder/themes/app_theme.dart';
+// lib/screens/job_swipe_screen.dart
 import 'dart:math';
 
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:job_tinder/services/saved_jobs_service.dart';
+import 'package:job_tinder/themes/app_theme.dart';
+import '../models/swipe_direction.dart';
 import '../models/job_model.dart';
-import '../models/user_model.dart'; // <-- IMPORT USER_MODEL (needed for score logic)
 import '../providers/auth_provider.dart';
 import '../providers/job_provider.dart';
+import '../widgets/job_card.dart';
 import 'profile_screen.dart';
 import 'job_detail_screen.dart';
-import 'ai_coach_screen.dart'; // <-- 1. IMPORT THE NEW SCREEN
-import '../widgets/job_card.dart';
+import 'saved_job_screen.dart';
+import 'ai_coach_screen.dart';
+
 
 class JobSwipeScreen extends StatefulWidget {
   const JobSwipeScreen({super.key});
@@ -21,8 +23,8 @@ class JobSwipeScreen extends StatefulWidget {
   State<JobSwipeScreen> createState() => _JobSwipeScreenState();
 }
 
-class _JobSwipeScreenState extends State<JobSwipeScreen> {
-  // (State variables are unchanged)
+class _JobSwipeScreenState extends State<JobSwipeScreen>
+    with SingleTickerProviderStateMixin {
   final List<JobModel> _savedJobs = [];
   int _cardIndex = 0;
   Offset _cardOffset = Offset.zero;
@@ -31,17 +33,31 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   bool _isSwiping = false;
   final Duration _animationDuration = const Duration(milliseconds: 300);
 
+  // subtle animation for entrance / buttons
+  late final AnimationController _buttonsController;
+  late final Animation<double> _buttonsScale;
+
   @override
   void initState() {
-    // (initState is unchanged)
     super.initState();
     _loadSavedJobs();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<JobProvider>().fetchJobs();
     });
+
+    _buttonsController =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
+    _buttonsScale = CurvedAnimation(parent: _buttonsController, curve: Curves.easeOutBack);
+    _buttonsController.forward();
   }
 
-  // (All methods from _loadSavedJobs to _animateAndReject are unchanged)
+  @override
+  void dispose() {
+    _buttonsController.dispose();
+    _swipeDirection.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSavedJobs() async {
     final savedJobs = await SavedJobsService.loadSwipedJobs();
     setState(() {
@@ -57,9 +73,9 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     if (_isSwiping) return;
     setState(() {
       _cardOffset += details.delta;
-      if (_cardOffset.dx > 10) {
+      if (_cardOffset.dx > 12) {
         _swipeDirection.value = SwipeDirection.right;
-      } else if (_cardOffset.dx < -10) {
+      } else if (_cardOffset.dx < -12) {
         _swipeDirection.value = SwipeDirection.left;
       } else {
         _swipeDirection.value = SwipeDirection.none;
@@ -134,7 +150,6 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
 
     Future.delayed(_animationDuration, () {
       _advanceCard();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -146,9 +161,8 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
       }
     });
   }
-  // ---
 
-  // --- NAVIGATION METHODS ---
+  // Navigation helpers
   void _showJobDetails(JobModel job) {
     Navigator.push(
       context,
@@ -159,52 +173,45 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
   void _goToSavedJobs() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (context) => SavedJobsScreen(savedJobs: _savedJobs)),
+      MaterialPageRoute(builder: (context) => SavedJobsScreen(savedJobs: _savedJobs)),
     );
   }
 
   void _goToProfile() {
-    Navigator.push(context,
-            MaterialPageRoute(builder: (context) => const ProfileScreen()))
-        .then((_) {
-      // Use setState to trigger a rebuild in case user details (for matching) changed
-      setState(() {});
-    });
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()))
+        .then((_) => setState(() {}));
   }
 
-  // --- 2. ADD THIS NEW NAVIGATION METHOD ---
   void _goToAiCoach() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AiCoachScreen()),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const AiCoachScreen()));
   }
-  // ---
 
   @override
   Widget build(BuildContext context) {
-    // Watch the provider for job list *and* score updates
     final jobProvider = context.watch<JobProvider>();
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 600;
+    final isTablet = width >= 600 && width < 1000;
+    final isDesktop = width >= 1000;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        title: const Text('Discover Jobs'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: _buildTopTitle(isMobile, isTablet, isDesktop),
+        centerTitle: isDesktop,
         leading: IconButton(
           icon: const Icon(Icons.person_outline, color: AppTheme.subTextColor),
-          tooltip: 'Profile',
           onPressed: _goToProfile,
         ),
         actions: [
-          // --- 3. ADD THIS NEW BUTTON ---
           IconButton(
-            icon: const Icon(Icons.auto_awesome, // AI/Sparkle icon
-                color: Color.fromARGB(255, 128, 13, 13),
-                size: 26),
+            icon: const Icon(Icons.auto_awesome,
+                color: Color.fromARGB(255, 128, 13, 13), size: 26),
             tooltip: 'AI Coach',
             onPressed: _goToAiCoach,
           ),
-          // ---
           IconButton(
             icon: const Icon(Icons.bookmark_border,
                 color: AppTheme.subTextColor, size: 28),
@@ -218,7 +225,24 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
     );
   }
 
-  // (The _buildBody function is unchanged)
+  Widget _buildTopTitle(bool isMobile, bool isTablet, bool isDesktop) {
+    // Center title for desktop, left for mobile/tablet
+    final titleWidget = Column(
+      crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        Text('Discover',
+            style: TextStyle(
+                fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 2),
+        Text(
+          'Chicago, IL',
+          style: TextStyle(fontSize: 13, color: AppTheme.subTextColor),
+        ),
+      ],
+    );
+    return titleWidget;
+  }
+
   Widget _buildBody(JobProvider provider) {
     switch (provider.state) {
       case NotifierState.initial:
@@ -236,142 +260,293 @@ class _JobSwipeScreenState extends State<JobSwipeScreen> {
           ),
         );
       case NotifierState.loaded:
-        // Data is loaded, show the swipe cards
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            children: [
-              Expanded(
-                child: provider.jobs.isEmpty
-                    ? const Center(
-                        child: Text("No jobs found."),
-                      )
-                    : _cardIndex >= provider.jobs.length
-                        ? const Center(
-                            child: Text(
-                              "That's all for now!\nCheck back later.",
-                              textAlign: TextAlign.center,
-                              style:
-                                  TextStyle(fontSize: 20, color: Colors.grey),
-                            ),
-                          )
-                        : buildCardStack(provider.jobs), // Pass jobs list
-              ),
-              if (_cardIndex < provider.jobs.length) buildActionButtons(),
-            ],
-          ),
-        );
+        return _loadedBody(provider);
     }
   }
 
-  // (The buildCardStack function is unchanged)
+  Widget _loadedBody(JobProvider provider) {
+    final jobs = provider.jobs;
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final cardAreaHeight = min(MediaQuery.of(context).size.height * 0.72, 720.0);
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+        child: Column(
+          children: [
+            // Card area
+            SizedBox(
+              height: cardAreaHeight,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width > 700 ? 560 : width),
+                  child: jobs.isEmpty || _cardIndex >= jobs.length
+                      ? const Center(child: Text("No jobs found."))
+                      : Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Background subtle rounded container to mimic design
+                            Positioned.fill(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(34),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 12))],
+                                ),
+                              ),
+                            ),
+
+                            // Card stack
+                            buildCardStack(jobs),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+
+            // Action buttons (only when there are more cards)
+            if (_cardIndex < (provider.jobs.length))
+              Padding(
+                padding: const EdgeInsets.only(top: 10.0, bottom: 6),
+                child: ScaleTransition(
+                  scale: _buttonsScale,
+                  child: buildActionButtons(),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
   Widget buildCardStack(List<JobModel> availableJobs) {
-    // We also need the user to send to Gemini
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
 
+    // Limit rendered cards to two for performance and visual stack
+    final toRender = min(3, availableJobs.length - _cardIndex);
+
     return Stack(
       alignment: Alignment.center,
-      children: List.generate(
-        min(2, availableJobs.length - _cardIndex),
-        (index) {
-          final jobIndex = _cardIndex + index;
-          final isTopCard = index == 0;
-          final card = availableJobs[jobIndex];
+      children: List.generate(toRender, (index) {
+        final jobIndex = _cardIndex + index;
+        final isTopCard = index == 0;
+        final cardJob = availableJobs[jobIndex];
 
-          // --- NEW SCORE LOGIC ---
-          // 1. Get the score data from the provider's cache
-          final key = card.title + card.company;
-          // Use watch() here to make sure the widget rebuilds when the score arrives
-          final scoreData = context.watch<JobProvider>().jobMatchScores[key];
-
-          int score = 0; // Default score
-
-          if (scoreData == null) {
-            // 2. If score isn't in cache, and we have a user,
-            //    and it's one of the top two cards, fetch it.
-            if (user != null && (isTopCard || index == 1)) {
-              // Use read() to "fire and forget" the API call
-              // The provider will notify when the score is ready
-              context.read<JobProvider>().fetchMatchScore(user: user, job: card);
-            }
-          } else {
-            // 3. If we have data, use it.
-            //    Default to 0 if score is negative (e.g., our -1 loading state)
-            score = (scoreData['score'] as int?) ?? 0;
-            if (score < 0) score = 0;
+        // Score logic (unchanged)
+        final key = cardJob.title + cardJob.company;
+        final scoreData = context.watch<JobProvider>().jobMatchScores[key];
+        int score = 0;
+        if (scoreData == null) {
+          if (user != null && (isTopCard || index == 1)) {
+            context.read<JobProvider>().fetchMatchScore(user: user, job: cardJob);
           }
-          // --- END NEW SCORE LOGIC ---
+        } else {
+          score = (scoreData['score'] as int?) ?? 0;
+          if (score < 0) score = 0;
+        }
 
-          // --- Animation logic (No changes) ---
-          final dragAmount = _cardOffset.dx.abs();
-          double scale = isTopCard ? 1.0 : max(0.9, 1.0 - (dragAmount / 1000));
-          double top = isTopCard ? 0 : 10;
-          if (!isTopCard) {
-            top -= (dragAmount / 40);
-          }
-          final transform = Matrix4.identity()
-            ..translate(_cardOffset.dx)
-            ..rotateZ(_cardOffset.dx / (MediaQuery.of(context).size.width * 0.8));
+        // Stacking transform (slight translation & rotation)
+        final baseOffset = Offset(0, index * 12.0);
+        final slideOffset = isTopCard ? _cardOffset : Offset.zero;
+        final totalOffset = baseOffset + slideOffset;
+        final rotation = isTopCard ? (_cardOffset.dx / (MediaQuery.of(context).size.width * 0.9)) : (index * -0.03);
 
-          return AnimatedPositioned(
-            duration: _animationDuration,
-            top: top,
-            child: Transform.scale(
-              scale: scale,
+        return Positioned(
+          top: index * 8.0,
+          child: Transform.translate(
+            offset: totalOffset,
+            child: Transform.rotate(
+              angle: rotation,
               child: GestureDetector(
                 onPanUpdate: isTopCard ? _onPanUpdate : null,
                 onPanEnd: isTopCard ? _onPanEnd : null,
-                onTap: isTopCard ? () => _showJobDetails(card) : null,
+                onTap: isTopCard ? () => _showJobDetails(cardJob) : null,
                 child: AnimatedContainer(
-                  transform: isTopCard ? transform : Matrix4.identity(),
-                  duration: _isSwiping
-                      ? _animationDuration
-                      : (_cardOffset == Offset.zero
-                          ? _animationDuration
-                          : Duration.zero),
+                  duration: _animationDuration,
                   curve: Curves.easeOut,
-                  child: ValueListenableBuilder<SwipeDirection>(
-                    valueListenable: _swipeDirection,
-                    builder: (context, direction, _) {
-                      return JobCard(
-                        job: card,
-                        score: score, // <-- Pass the new score
-                        swipeDirection:
-                            isTopCard ? direction : SwipeDirection.none,
-                      );
-                    },
+                  width: min(MediaQuery.of(context).size.width, 560),
+                  // outer rounded shape to match mockup
+                  child: Stack(
+                    children: [
+                      // Card content (use your JobCard widget, passing score)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: Material(
+                          color: Colors.white,
+                          child: JobCard(
+                            job: cardJob,
+                            score: score,
+                            swipeDirection: isTopCard ? _swipeDirection.value : SwipeDirection.none,
+                          ),
+                        ),
+                      ),
+
+                      // Top-left distance badge (only on top card)
+                      if (isTopCard)
+                        Positioned(
+                          left: 16,
+                          top: 16,
+                          child: _distanceBadge(cardJob),
+                        ),
+
+                      // Right translucent action icons stacked vertically (mimic heart/star/x)
+                      if (isTopCard)
+                        Positioned(
+                          right: 12,
+                          bottom: 80,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _roundIconButton(
+                                icon: Icons.close,
+                                onTap: _animateAndReject,
+                                color: Colors.white.withOpacity(0.95),
+                                bg: Colors.white.withOpacity(0.12),
+                              ),
+                              const SizedBox(height: 12),
+                              _roundIconButton(
+                                icon: Icons.star_border,
+                                onTap: () {
+                                  // optional: mark favorite on card
+                                  // keep behavior same as save
+                                  _animateAndSave();
+                                },
+                                color: Colors.white.withOpacity(0.95),
+                                bg: Colors.white.withOpacity(0.12),
+                              ),
+                              const SizedBox(height: 12),
+                              _roundIconButton(
+                                icon: Icons.favorite,
+                                onTap: _animateAndSave,
+                                color: Colors.white.withOpacity(0.95),
+                                bg: Colors.white.withOpacity(0.14),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Bottom-left overlay title (job title / company)
+                      Positioned(
+                        left: 18,
+                        bottom: 18,
+                        child: _cardTitleOverlay(cardJob),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          );
-        },
-      ).reversed.toList(),
+          ),
+        );
+      }).reversed.toList(),
     );
   }
 
-  // (The buildActionButtons function is unchanged)
+  Widget _distanceBadge(JobModel job) {
+  final jobType = job.experienceLevel.isNotEmpty
+      ? job.experienceLevel
+      : 'Job'; // fallback
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.black.withOpacity(0.7),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.work, color: Colors.white, size: 14),
+        const SizedBox(width: 6),
+        Text(
+          jobType,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ],
+    ),
+  );
+}
+
+
+  Widget _roundIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required Color color,
+    required Color bg,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        height: 48,
+        width: 48,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withOpacity(0.06)),
+        ),
+        child: Icon(icon, color: color, size: 22),
+      ),
+    );
+  }
+
+  Widget _cardTitleOverlay(JobModel job) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 360),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(job.title,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(job.company, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
   Widget buildActionButtons() {
     return Padding(
-      padding: const EdgeInsets.only(top: 20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          // Reject
           FloatingActionButton(
             heroTag: 'reject_btn',
             onPressed: _animateAndReject,
             backgroundColor: Colors.white,
-            elevation: 4,
-            child: const Icon(Icons.close, color: Colors.red, size: 36),
+            elevation: 6,
+            child: const Icon(Icons.close, color: Colors.red, size: 34),
           ),
+
+          // Info / Details (center)
+          FloatingActionButton(
+            heroTag: 'info_btn',
+            onPressed: () {
+              final jobProvider = context.read<JobProvider>();
+              if (_cardIndex < jobProvider.jobs.length) {
+                _showJobDetails(jobProvider.jobs[_cardIndex]);
+              }
+            },
+            backgroundColor: Colors.white,
+            elevation: 6,
+            child: const Icon(Icons.info_outline, color: Colors.black87, size: 28),
+          ),
+
+          // Save (bookmark)
           FloatingActionButton(
             heroTag: 'save_btn',
             onPressed: _animateAndSave,
             backgroundColor: Colors.white,
-            elevation: 4,
-            child: const Icon(Icons.bookmark,
-                color: AppTheme.secondaryColor, size: 36),
+            elevation: 6,
+            child: const Icon(Icons.bookmark, color: AppTheme.secondaryColor, size: 34),
           ),
         ],
       ),
