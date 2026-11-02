@@ -5,7 +5,7 @@ import '../models/user_model.dart';
 import '../models/job_model.dart';
 
 class GeminiMatchingService {
-  static const String _geminiApiKey = 'REMOVED_SECRET';
+  static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   static GenerativeModel? _jsonModel;
   static GenerativeModel? _textModel;
@@ -17,8 +17,8 @@ class GeminiMatchingService {
   ];
 
   static GenerativeModel _getJsonModel() {
-    if (_geminiApiKey == 'YOUR_API_KEY_HERE') {
-      throw Exception('Please add your Gemini API Key');
+    if (_geminiApiKey.isEmpty) {
+      throw Exception('Missing GEMINI_API_KEY: run with --dart-define=GEMINI_API_KEY=...');
     }
     _jsonModel ??= GenerativeModel(
       model: 'gemini-2.5-flash',
@@ -32,8 +32,8 @@ class GeminiMatchingService {
   }
 
   static GenerativeModel _getTextModel() {
-    if (_geminiApiKey == 'YOUR_API_KEY_HERE') {
-      throw Exception('Please add your Gemini API Key');
+    if (_geminiApiKey.isEmpty) {
+      throw Exception('Missing GEMINI_API_KEY: run with --dart-define=GEMINI_API_KEY=...');
     }
     _textModel ??= GenerativeModel(
       model: 'gemini-2.5-flash',
